@@ -27,3 +27,7 @@ videos/
 .idea/
 Thumbs.db
 desktop.ini
+
+# operator-supplied reference material, not redistributed
+istockphoto-*.jpg
+pieces-svg.zip
