@@ -1,0 +1,29 @@
+# Python / venv
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# training output
+logs/
+logs_*.txt
+runs/
+*.spec
+
+# model checkpoints (the four release models are added explicitly with `git add -f`)
+models/
+
+# build artefacts
+dist/
+build_pyi/
+*.toc
+
+# media produced at runtime
+videos/
+*.mp4
+
+# editor / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
