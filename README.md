@@ -247,8 +247,10 @@ distinct dice rolls and lets the opponent take their best reply. Head to head, s
 sides, alternating colours:
 
 ```
-2-ply 15W · 1-ply 5W · 0D over 20 games → 75.0% for 2-ply
+2-ply 95W · 1-ply 25W · 0D over 120 games → 79.2% for 2-ply
 ```
+
+(First 20 games read 15W-5W; the 120-game result is the number to trust.)
 
 So the search depth is worth real strength, and `backgammon_ui.py --search 2ply` (the default)
 plays better than the net it uses. `--search 1ply` is the fast mode.
