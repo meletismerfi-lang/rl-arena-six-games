@@ -14,7 +14,7 @@ import numpy as np
 import pygame
 import torch as th
 
-from backgammon_agent import Board, WHITE, BLACK, ValueNet, choose, MODEL
+from backgammon_agent import Board, WHITE, ValueNet, choose, choose_2ply, MODEL
 from backgammon_ui import (BOARD_W, BOARD_H, HUD, MARGIN, ROWS_H, render as draw_board)
 
 
@@ -38,6 +38,7 @@ def main() -> None:
     ap.add_argument("--mode", default="netvspip", choices=["netvspip", "netvnet"])
     ap.add_argument("--fps", type=int, default=12)
     ap.add_argument("--device", default="cuda" if th.cuda.is_available() else "cpu")
+    ap.add_argument("--search", default="2ply", choices=["1ply", "2ply"])
     args = ap.parse_args()
 
     net_a = load_net(args.device)
@@ -63,11 +64,12 @@ def main() -> None:
 
         d1, d2 = int(rng.integers(1, 7)), int(rng.integers(1, 7))
         pips = [d1, d2] if d1 != d2 else [d1] * 4
+        pick = choose_2ply if args.search == "2ply" else choose
         if side == WHITE:
-            board = choose(board, side, pips, net_a, args.device)
+            board = pick(board, side, pips, net_a, args.device)
             mover = "A (TD net)"
         elif net_b is not None:
-            board = choose(board, side, pips, net_b, args.device)
+            board = pick(board, side, pips, net_b, args.device)
             mover = "B (TD net)"
         else:
             board = pip_choice(board, side, pips)

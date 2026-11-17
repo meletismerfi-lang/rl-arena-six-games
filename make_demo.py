@@ -4,7 +4,6 @@
   python make_demo.py --game pong --algo dqn
 """
 import argparse
-import base64
 import json
 from pathlib import Path
 

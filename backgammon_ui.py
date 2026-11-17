@@ -18,7 +18,7 @@ import pygame
 import pygame.gfxdraw as gfx
 import torch as th
 
-from backgammon_agent import Board, WHITE, BLACK, ValueNet, choose, MODEL
+from backgammon_agent import Board, WHITE, BLACK, ValueNet, choose, choose_2ply, MODEL
 
 ROOT = Path(__file__).resolve().parent
 MARGIN, BAR_W, TRAY_W = 30, 46, 46
@@ -169,7 +169,14 @@ def render(screen, board: Board, font, small, pips, selected, message, human_whi
 
 
 def point_at(pos) -> int | None:
+    """Point index, or -1 when the click is on the off tray (bear a checker off)."""
     x, y = pos
+    tray = pygame.Rect(tray_x() - 16, MARGIN, 32, ROWS_H * 2)
+    if tray.collidepoint(x, y):
+        return -1                      # -1 = the off tray (bear a checker off)
+    bar = pygame.Rect(MARGIN + COL_W * 12, MARGIN, BAR_W, ROWS_H * 2)
+    if bar.collidepoint(x, y):
+        return -2                      # -2 = the bar (enter a hit checker)
     if not (MARGIN <= x <= MARGIN + COL_W * 12 and MARGIN <= y <= MARGIN + ROWS_H * 2):
         return None
     col = (x - MARGIN) // COL_W
@@ -182,6 +189,8 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--human", default="white", choices=["white", "black"])
     ap.add_argument("--fps", type=int, default=30)
+    ap.add_argument("--search", default="2ply", choices=["1ply", "2ply"],
+                    help="2ply = expectimax over the opponent's next roll (slower, stronger)")
     args = ap.parse_args()
 
     device = "cuda" if th.cuda.is_available() else "cpu"
@@ -203,7 +212,7 @@ def main() -> None:
 
     pygame.init()
     screen = pygame.display.set_mode((BOARD_W, MARGIN * 2 + ROWS_H * 2 + HUD))
-    pygame.display.set_caption("Backgammon — you vs the TD(lambda) agent")
+    pygame.display.set_caption(f"Backgammon — you vs the TD(lambda) agent ({args.search})")
     font = pygame.font.SysFont("consolas", 17, bold=True)
     small = pygame.font.SysFont("consolas", 13)
     clock = pygame.time.Clock()
@@ -240,22 +249,41 @@ def main() -> None:
                 idx = point_at(ev.pos)
                 if idx is None:
                     continue
-                n = int(board.points[idx])
+                if idx == -1:
+                    idx = -1
+                my_bar = board.bar_w if human_side == WHITE else board.bar_b
+                n = int(board.points[idx]) if idx >= 0 else 0
                 if selected is None:
-                    if (n > 0) if human_side == WHITE else (n < 0):
+                    if idx == -2 and my_bar > 0:
+                        selected = -2
+                        message = "enter from the bar — click a lit point"
+                    elif idx >= 0 and ((n > 0) if human_side == WHITE else (n < 0)):
                         selected = idx
                         message = "now click a lit destination"
+                    elif idx == -2:
+                        message = "you have no checker on the bar"
+                    elif idx >= 0:
+                        message = "that point has no checker of yours"
+                    else:
+                        message = "click a checker first"
                 else:
                     die = h = target = None
                     for d in sorted(set(pips)):
                         for dest, hit in board._destinations(board, human_side, d):
-                            if board._source_point(board, human_side, d, dest) == selected and dest == idx:
+                            # from the bar every legal destination is an entry, so don't
+                            # compare against _source_point (it returns a board point there)
+                            if selected == -2:
+                                if dest == idx:
+                                    die, target, h = d, dest, hit
+                                    break
+                            elif board._source_point(board, human_side, d, dest) == selected and dest == idx:
                                 die, target, h = d, dest, hit
                                 break
                         if die:
                             break
                     if die:
-                        board._apply(board, human_side, selected, target, h)
+                        src = selected if selected >= 0 else -1
+                        board._apply(board, human_side, src, target, h)
                         pips.remove(die)
                         selected = None
                         message = f"played — dice left {pips}" if pips else "turn over"
@@ -266,7 +294,7 @@ def main() -> None:
                         message = "illegal — pick another checker"
 
         if pips and side != human_side:
-            board = choose(board, side, pips, net, device)
+            board = (choose_2ply if args.search == "2ply" else choose)(board, side, pips, net, device)
             pips = []
             end_turn()
 

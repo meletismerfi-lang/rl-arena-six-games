@@ -5,7 +5,6 @@
 import argparse
 from pathlib import Path
 
-import numpy as np
 import torch as th
 from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback, EvalCallback
@@ -72,7 +71,6 @@ def main() -> None:
         EvalCallback(eval_env, best_model_save_path=str(out), log_path=str(ROOT / "logs" / "flappy" / "eval"),
                      eval_freq=max(25_000 // args.envs, 500), n_eval_episodes=5, deterministic=True),
     ])
-    env0 = train_env
     model.env = None
     model.save(out / "final.zip")
     print("saved", out / "final.zip")

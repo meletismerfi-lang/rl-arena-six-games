@@ -251,7 +251,47 @@ def choose(board: Board, side: int, pips, net, device) -> Board:
     return cands[int(th.argmax(v).item())]
 
 
-def play_game(net, device, collect: bool = False, rng=None, eps: float = 0.0):
+DICE21 = [(a, b) for a in range(1, 7) for b in range(a, 7)]
+
+
+def choose_2ply(board: "Board", side: int, pips, net, device, top_k: int = 6) -> "Board":
+    """Expectimax over the opponent's next roll — a real strength jump over 1-ply greed.
+
+    Rank the legal moves with the value net (1-ply), keep the best `top_k`, then for each of
+    those play out every one of the 21 distinct dice rolls and let the opponent take their best
+    reply by the same net. The move's value is the mean of -V(reply) across rolls, because the
+    net always reports the expectation of the side to move.
+    """
+    cands = board.legal_moves(side, pips)
+    if len(cands) <= 1:
+        return cands[0] if cands else board.copy()
+
+    with th.no_grad():
+        v1 = net(th.from_numpy(np.stack([c.encode(side) for c in cands])).to(device))
+    order = th.argsort(v1, descending=True)[:top_k].tolist()
+    finalists = [cands[i] for i in order]
+    if len(finalists) == 1:
+        return finalists[0]
+
+    best_value, best_board = -9e9, finalists[0]
+    for cand in finalists:
+        total = 0.0
+        for d1, d2 in DICE21:
+            d_pips = [d1, d2] if d1 != d2 else [d1] * 4
+            replies = cand.legal_moves(-side, d_pips)
+            if not replies:
+                total += 0.0            # opponent cannot move: no swing
+                continue
+            with th.no_grad():
+                vr = net(th.from_numpy(np.stack([r.encode(-side) for r in replies])).to(device))
+            total += -float(th.max(vr))  # opponent plays their best reply
+        value = total / len(DICE21)
+        if value > best_value:
+            best_value, best_board = value, cand
+    return best_board
+
+
+def play_game(net, device, collect: bool = False, rng=None, eps: float = 0.0, search: str = "1ply"):
     rng = rng or np.random.default_rng()
     board = Board()
     side = WHITE if rng.random() < 0.5 else BLACK
@@ -261,9 +301,6 @@ def play_game(net, device, collect: bool = False, rng=None, eps: float = 0.0):
         w = board.winner()
         if w is not None:
             outcome = 1.0 if w == WHITE else -1.0
-            if collect:
-                for x, s in traj:
-                    traj_val = outcome * s
             return board, plies, outcome, traj, side
         if plies > 500:
             return board, plies, 0.0, traj, side
@@ -274,6 +311,8 @@ def play_game(net, device, collect: bool = False, rng=None, eps: float = 0.0):
         if eps and rng.random() < eps:
             cands = board.legal_moves(side, pips)
             board = cands[int(rng.integers(len(cands)))]
+        elif search == "2ply":
+            board = choose_2ply(board, side, pips, net, device)
         else:
             board = choose(board, side, pips, net, device)
         side = -side
@@ -346,7 +385,7 @@ def human_play(net, device, human_side: str) -> None:
         print_board(board)
         if (human_side == "white") == (side == WHITE):
             cands = board.legal_moves(side, dice)
-            for i, c in enumerate(cands):
+            for i in range(len(cands)):
                 print(f"  [{i}] next board above")
             idx = int(input(f"choose move 0..{len(cands)-1}: "))
             board = cands[idx]

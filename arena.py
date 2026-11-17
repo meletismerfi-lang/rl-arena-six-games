@@ -73,6 +73,14 @@ def draw(screen, font, big, small, flat_idx: int) -> None:
     screen.blit(foot, (w // 2 - foot.get_width() // 2, h - 22))
 
 
+def newest_doom_model() -> str | None:
+    """Newest models/doom/<scenario>/<run>/best_model.zip, as a repo-relative posix path."""
+    hits = sorted(ROOT.glob("models/doom/*/*/best_model.zip"), key=lambda p: p.stat().st_mtime)
+    if not hits:
+        return None
+    return hits[-1].relative_to(ROOT).as_posix()
+
+
 def launch(cmd: list[str]) -> None:
     path = ROOT / cmd[0]
     if not path.exists() and cmd[0] != "doom_wsl.py":
@@ -80,10 +88,16 @@ def launch(cmd: list[str]) -> None:
         return
     print("launching", " ".join(cmd))
     if path.name == "doom_wsl.py":
-        # ViZDoom segfaults on this Windows box; it runs in WSL, drawing through WSLg
+        # ViZDoom segfaults on this Windows box; it runs in WSL, drawing through WSLg.
+        # Pick the newest best_model.zip across doom runs so a retrain is picked up automatically.
+        model = newest_doom_model()
+        if model is None:
+            print("no doom checkpoint found in models/doom/*/*/best_model.zip")
+            return
+        print("doom model:", model)
         cmd = ["wsl.exe", "-d", "jaxgpu", "-u", "root", "--", "bash", "-lc",
-               "cd /mnt/c/Users/melet/AI/rl-games && exec /root/gpurl/bin/python doom_play.py "
-               "--model models/doom/defend_the_center/ppo_v2/best_model.zip --episodes 5 --live"]
+               f"cd /mnt/c/Users/melet/AI/rl-games && exec /root/gpurl/bin/python doom_play.py "
+               f"--model {model} --episodes 5 --live"]
         subprocess.run(cmd, cwd=str(ROOT))
         return
     if path.name == "scrabble_agent.py":

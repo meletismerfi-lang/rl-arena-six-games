@@ -1,6 +1,5 @@
 """Measure ViZDoom env throughput at different parallel env counts (random policy)."""
 import os
-import sys
 import time
 
 os.environ.setdefault("OMP_NUM_THREADS", "1")

@@ -103,11 +103,9 @@ class FlappyEnv(gym.Env):
         sx, sy = SCREEN / W, SCREEN / H
         s.fill((92, 180, 240))                                    # sky
         for pipe in self.pipes:
-            top_h = (pipe["gap_y"] - GAP / 2) * sy
             px, pw = pipe["x"] * sx, PIPE_W * sx
-            gap_top = (pipe["gap_y"] - GAP / 2) * sy
             gap_bot = (pipe["gap_y"] + GAP / 2) * sy
-            pygame.draw.rect(s, (74, 160, 60), (px, 0, pw, top_h))
+            pygame.draw.rect(s, (74, 160, 60), (px, 0, pw, (pipe["gap_y"] - GAP / 2) * sy))
             pygame.draw.rect(s, (74, 160, 60), (px, gap_bot, pw, SCREEN - gap_bot))
         pygame.draw.rect(s, (222, 216, 149), (0, SCREEN - 4, SCREEN, 4))   # ground
         pygame.draw.circle(s, (250, 215, 60), (int(BIRD_X * sx), int(self.bird_y * sy)), max(2, int(BIRD_R * sy)))

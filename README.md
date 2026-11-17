@@ -225,6 +225,34 @@ architecture is one interface with a backend per game family.
   tiles already on the board, so spending `m.word` against the rack raises `ValueError` as soon as
   a word crosses existing letters.
 
+## Fixes and upgrades (round 2)
+
+Bugs found and fixed:
+
+| where | bug | effect |
+|---|---|---|
+| `backgammon_ui.py` | `point_at()` only mapped the 24 triangles | the off tray was unclickable — **a human game could never end**, because bearing off is a click |
+| `backgammon_ui.py` | the bar was not clickable either | with checkers on the bar the human had no legal move and no way to enter |
+| `arena.py` | a closing game handed its click to the menu | clicking to close a game re-launched it (fixed with an event drain + 600 ms guard, button-1 only, one entry per click) |
+| `scrabble_agent.py` | `score_move` scored twice and threw the first pass away | correctness was fine, 2x wasted work per candidate move; rewritten as one pass |
+| `scrabble_agent.py` | human games had no end condition | `--play` ran forever; now ends after four consecutive passes |
+| `doom_play.py` | `kills` declared, never counted | episode summaries reported no kills |
+| `doom_train.py` | no `--resume` | a plateaued run could not be continued; added |
+| `arena.py` | Doom entry hardcoded one run path | a retrain would not be picked up; now resolves the newest `best_model.zip` |
+
+Upgrade — backgammon 2-ply expectimax:
+
+`choose_2ply()` ranks legal moves with the value net, keeps the best 6, then plays out all 21
+distinct dice rolls and lets the opponent take their best reply. Head to head, same net on both
+sides, alternating colours:
+
+```
+2-ply 15W · 1-ply 5W · 0D over 20 games → 75.0% for 2-ply
+```
+
+So the search depth is worth real strength, and `backgammon_ui.py --search 2ply` (the default)
+plays better than the net it uses. `--search 1ply` is the fast mode.
+
 ## DQN update-ratio finding (Ms. Pac-Man)
 
 Same 1.69M-param network, unclipped rewards, 6 full-game episodes each:

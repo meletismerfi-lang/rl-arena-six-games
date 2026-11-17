@@ -111,7 +111,7 @@ def main() -> None:
         print(f"GPU: {gpu_name} ({th.cuda.get_device_properties(0).total_memory / 1024**3:.1f} GB VRAM)", flush=True)
         if bad:
             raise SystemExit(f"Refusing to train on '{gpu_name}' (iGPU). Force the RTX in Windows graphics settings.")
-    tag = game_key = env_id.split("/")[1].rsplit("-", 1)[0].lower()
+    game_key = env_id.split("/")[1].rsplit("-", 1)[0].lower()
     run_name = f"{args.algo}{args.tag}"
     out = ROOT / "models" / game_key / run_name
     logs = ROOT / "logs" / game_key / run_name

@@ -7,7 +7,6 @@ import argparse
 import json
 from pathlib import Path
 
-import numpy as np
 from stable_baselines3 import PPO
 from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack, VecTransposeImage
 
@@ -54,6 +53,8 @@ def main() -> None:
             obs, reward, dones, infos = venv.step(action)
             total += float(reward[0])
             steps += 1
+            info = infos[0] if isinstance(infos, (list, tuple)) else {}
+            kills = int(info.get("kills", kills))
             done = bool(dones[0])
             if not args.live and writer is None:
                 h, w = env.rgb_frame().shape[:2]

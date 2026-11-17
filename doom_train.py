@@ -62,6 +62,7 @@ def main() -> None:
     p.add_argument("--eval-every", type=int, default=20_000)
     p.add_argument("--eval-episodes", type=int, default=5)
     p.add_argument("--tag", default="")
+    p.add_argument("--resume", default=None, help="checkpoint to continue from")
     p.add_argument("--device", default="cuda")
     args = p.parse_args()
 
@@ -79,7 +80,6 @@ def main() -> None:
     out.mkdir(parents=True, exist_ok=True)
     logs.mkdir(parents=True, exist_ok=True)
 
-    vec_cls = SubprocVecEnv if args.n_envs > 1 else DummyVecEnv
     train_env = SubprocVecEnv([make_env(args.scenario, args.frame_skip, args.seed, i) for i in range(args.n_envs)]) \
         if args.n_envs > 1 else DummyVecEnv([make_env(args.scenario, args.frame_skip, args.seed, 0)])
     train_env = VecTransposeImage(VecFrameStack(train_env, n_stack=4))
@@ -88,7 +88,12 @@ def main() -> None:
     print(f"scenario={args.scenario} obs={train_env.observation_space} actions={train_env.action_space.n} "
           f"n_envs={args.n_envs}", flush=True)
 
-    model = PPO(
+    if args.resume:
+        print(f"resuming from {args.resume}", flush=True)
+        model = PPO.load(args.resume, env=train_env, device=args.device)
+        model.tensorboard_log = str(logs)
+    else:
+        model = PPO(
         "CnnPolicy", train_env, verbose=0, device=args.device, seed=args.seed,
         learning_rate=args.lr, n_steps=args.n_steps, batch_size=args.batch_size, n_epochs=args.n_epochs,
         gamma=0.99, gae_lambda=0.95, clip_range=0.1, ent_coef=args.ent_coef, vf_coef=0.5,

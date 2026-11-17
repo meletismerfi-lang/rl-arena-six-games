@@ -50,7 +50,7 @@ def main() -> None:
     ap.add_argument("--steps", type=int, default=400_000)
     ap.add_argument("--envs", type=int, default=16)
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--device", default="cpu")
+    ap.add_argument("--device", default="cuda")
     args = ap.parse_args()
 
     th.set_num_threads(1)

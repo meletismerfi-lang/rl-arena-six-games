@@ -14,7 +14,6 @@ from pathlib import Path
 
 import numpy as np
 import pygame
-import torch as th
 from stable_baselines3 import PPO
 
 from flappy_env import FlappyEnv, W, H, PIPE_W, GAP, PIPE_SPEED, PIPE_SPACING, GRAVITY, FLAP, BIRD_X, BIRD_R

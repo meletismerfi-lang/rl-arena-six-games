@@ -11,7 +11,7 @@ from pathlib import Path
 
 import torch as th
 from stable_baselines3 import DQN
-from stable_baselines3.common.callbacks import BaseCallback, CheckpointCallback
+from stable_baselines3.common.callbacks import BaseCallback
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envpool_vec import EnvPoolAtari  # noqa: E402

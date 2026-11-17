@@ -135,7 +135,6 @@ def main() -> None:
     history: list[chess.Move] = []
     running = True
     pending_bot = board.turn != human_color
-    t_bot = 0.0
 
     while running:
         for ev in pygame.event.get():

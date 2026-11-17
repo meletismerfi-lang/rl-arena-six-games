@@ -19,7 +19,6 @@ import time
 from collections import deque
 from pathlib import Path
 
-import cv2
 import gymnasium as gym
 import numpy as np
 import pygame

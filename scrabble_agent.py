@@ -218,49 +218,33 @@ class Board:
 
     # ------------------------------------------------------------- scoring
     def score_move(self, m: Move) -> tuple[int, int]:
-        total = 0
-        words = [m.word]
-        dl = dw = 0
+        """Standard Scrabble scoring: premiums apply only to newly placed tiles, the word
+        multipliers apply to the main word (not the cross words), +50 for a bingo."""
+        main = 0
         word_mult = 1
         placed = 0
+        crosses: list[str] = []
         for i, ch in enumerate(m.word):
             r, c = (m.row, m.col + i) if m.horizontal else (m.row + i, m.col)
-            if self.grid[r][c] is None:
+            existing = self.grid[r][c]
+            if existing is None:
                 placed += 1
-                letter_mult = 3 if (r, c) in TL else 2 if (r, c) in DL else 1
+                lm = 3 if (r, c) in TL else 2 if (r, c) in DL else 1
+                main += VALUES.get(ch, 0) * lm
                 if (r, c) in TW:
                     word_mult *= 3
                 elif (r, c) in DW:
                     word_mult *= 2
-                total += VALUES.get(ch, 0) * letter_mult
-                # cross word
                 cross = self._cross_word(r, c, ch, m.horizontal)
                 if cross:
-                    words.append(cross)
+                    crosses.append(cross)
             else:
-                total += VALUES.get(self.grid[r][c], 0)
-        subtotal = 0
-        for w in words:
-            sub = 0
-            for ch in w:
-                sub += VALUES.get(ch, 0)
-            subtotal += sub
-        # rebuild properly: main word keeps premium multipliers, cross words are plain
-        main = 0
-        for i, ch in enumerate(m.word):
-            r, c = (m.row, m.col + i) if m.horizontal else (m.row + i, m.col)
-            if self.grid[r][c] is None:
-                lm = 3 if (r, c) in TL else 2 if (r, c) in DL else 1
-                main += VALUES.get(ch, 0) * lm
-            else:
-                main += VALUES.get(self.grid[r][c], 0)
-        score = main * word_mult
-        for w in words[1:]:
-            score += sum(VALUES.get(ch, 0) for ch in w)
-        blanks = m.word.count("?")
+                main += VALUES.get(existing, 0)
+
+        score = main * word_mult + sum(sum(VALUES.get(ch, 0) for ch in w) for w in crosses)
         if placed == 7:
             score += 50
-        return score, blanks
+        return score, m.word.count("?")
 
     def _cross_word(self, r: int, c: int, ch: str, horizontal: bool) -> str:
         if horizontal:
@@ -394,13 +378,17 @@ def human_play(first: str = "human") -> None:
     bot_rack = draw(bag, 7)
     scores = {"you": 0, "bot": 0}
     turn = "you" if first == "human" else "bot"
-    while True:
+    passes_in_a_row = 0
+    while passes_in_a_row < 4:
         if turn == "you":
             print("\n" + board.show())
             print(f"\nyour rack: {rack}   scores you {scores['you']} / bot {scores['bot']}")
             moves = board.generate(rack)
             if not moves:
                 print("no moves — passing")
+                passes_in_a_row += 1
+                if passes_in_a_row >= 4:
+                    break
                 turn = "bot"
                 continue
             shown = sorted(moves, key=lambda m: -m.score)[:15]
@@ -410,6 +398,9 @@ def human_play(first: str = "human") -> None:
             print("   or type: word row col h/v   ('pass' to skip)")
             raw = input("> ").strip().lower()
             if raw in {"pass", "p"}:
+                passes_in_a_row += 1
+                if passes_in_a_row >= 4:
+                    break
                 turn = "bot"
                 continue
             chosen = None
@@ -429,6 +420,7 @@ def human_play(first: str = "human") -> None:
                 print("illegal move")
                 continue
             board.apply(chosen)
+            passes_in_a_row = 0
             scores["you"] += chosen.score
             for ch in chosen.word:
                 if ch in rack:
@@ -441,10 +433,14 @@ def human_play(first: str = "human") -> None:
             best = best_move(board, bot_rack, top_k=1)
             if not best:
                 print("bot passes")
+                passes_in_a_row += 1
+                if passes_in_a_row >= 4:
+                    break
                 turn = "you"
                 continue
             m = best[0][0]
             board.apply(m)
+            passes_in_a_row = 0
             scores["bot"] += m.score
             for ch in m.word:
                 if ch in bot_rack:
