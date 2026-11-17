@@ -74,7 +74,15 @@ def draw(screen, font, big, small, flat_idx: int) -> None:
 
 
 def newest_doom_model() -> str | None:
-    """Newest models/doom/<scenario>/<run>/best_model.zip, as a repo-relative posix path."""
+    """The shipped Doom agent.
+
+    models/doom/best.zip is the measured best (see best.json): retrains have repeatedly
+    resumed from it and failed to beat it, so "newest file" would ship a worse model.
+    Falls back to the newest best_model.zip only when the curated one is absent.
+    """
+    canon = ROOT / "models" / "doom" / "best.zip"
+    if canon.exists():
+        return canon.relative_to(ROOT).as_posix()
     hits = sorted(ROOT.glob("models/doom/*/*/best_model.zip"), key=lambda p: p.stat().st_mtime)
     if not hits:
         return None

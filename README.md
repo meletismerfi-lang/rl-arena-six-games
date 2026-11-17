@@ -262,8 +262,15 @@ Same 1.69M-param network, unclipped rewards, 6 full-game episodes each:
 | setup | updates per env step | mean score |
 |---|---|---|
 | 4M steps, 32 envs | 1 per 64 | **2,355** |
+| 8M more steps at half the LR, same ratio | 1 per 64 | 1,662 (best of that run) |
 | 20M steps, 32 envs (`gradient_steps 1`) | 1 per 128 | 1,350 |
 | 30M steps, 256 envs, RTX 5090 pod | 1 per 512 | 1,042 |
+
+The 8M continuation was the fair test of "is more steps better at the *right* ratio": checkpoints
+evaluated every 1M steps gave 1,498 / **1,662** / 733 / 1,060 / 1,598 / 1,398 / 1,453 / 1,150 —
+every single one below the 4M model. So 4M steps at 1 update per 64 frames is the optimum for
+this network and buffer, and further gains have to come from architecture (n-step returns,
+prioritised replay), not from more training anywhere on this curve.
 
 7.5x the frames bought half the score. Scaling `n_envs` without scaling `gradient_steps`
 starves the learner — the pod sat at 50% GPU utilisation the whole run, which was the tell.

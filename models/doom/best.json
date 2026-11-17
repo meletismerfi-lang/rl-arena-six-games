@@ -1,0 +1,1 @@
+{"source":"defend_the_center/ppo_v2/best_model.zip","eval_mean":12.2,"steps":800000,"note":"v3 continued from this and peaked at 10.6, so this stays the shipped model"}
