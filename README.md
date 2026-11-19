@@ -13,7 +13,7 @@ what that means, what the agent decided alone, and what the operator decided.
 |---|---|---|
 | chess | you vs Stockfish | two engines |
 | Flappy Bird | you vs a 103-pipe PPO bot | two bots racing |
-| Ms. Pac-Man | you vs the 2,355 DQN | 4M model vs 10M model |
+| Ms. Pac-Man | you vs the 3,230 Rainbow C51 (2,355 DQN with `--agent dqn`) | 10M model vs 4M model |
 | backgammon | you vs a TD(λ) net | net vs pip baseline |
 | Doom | — | PPO agent streaming from WSL |
 | Scrabble | you vs the trie engine | bot vs bot |
@@ -320,6 +320,31 @@ transitions, which does not fit in a 28 GB WSL VM and dies at CUDA init. Consecu
 | 500,000 | 26.3 GB | **16.4 GB** |
 
 `--naive-frames` restores the old layout for comparison.
+
+### Shipping it in the arena (`pacman_duel.py`)
+
+Wiring the checkpoint into the playable duel first looked impossible: a Windows-side viewer scored
+it 280 against EnvPool's 3,530. That was a bug in the viewer, not a preprocessing mismatch. Dumping
+`(210x160 RGB, 84x84 obs)` pairs from two lockstep EnvPool instances and comparing candidate
+pipelines pixel by pixel isolated the real difference:
+
+| pipeline | exact pixels | mean abs diff |
+|---|---|---|
+| grayscale → resize `INTER_AREA` (**EnvPool**) | 99.6% | 0.05 |
+| resize `INTER_AREA` → grayscale (gymnasium) | 92.0% | 0.13 |
+| resize `INTER_LINEAR` → grayscale | 72.5% | 5.14 |
+| PIL bilinear → `L` | 53.3% | 2.88 |
+
+`pacman_duel.py` now does what EnvPool does — grayscale first, then `INTER_AREA`, with the last two
+of the four skipped frames max-pooled — and measures honestly in the same window it ships:
+
+| agent | arena harness | training reference |
+|---|---|---|
+| Rainbow C51 (`--agent rainbow`, default) | **3,230** | 3,530 on EnvPool |
+| DQN (`--agent dqn`) | 2,210 | 2,355 on EnvPool |
+
+Both reproduce their training scores within ~8%, so the gap was never the observation pipeline.
+`diag/dump_envpool_obs.py` and `diag/win_rainbow_eval.py` are kept so the comparison is repeatable.
 
 ### What did not work
 

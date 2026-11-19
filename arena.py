@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parent
 PLAY = [
     ("CHESS", "vs Stockfish", ["chess_ui.py", "--human", "white", "--elo", "1600"]),
     ("FLAPPY BIRD", "vs a solved PPO bot (103 pipes)", ["flappy_duel.py"]),
-    ("MS. PAC-MAN", "vs the 2,355 DQN", ["pacman_duel.py"]),
+    ("MS. PAC-MAN", "vs the 3,230 Rainbow C51", ["pacman_duel.py"]),
     ("BACKGAMMON", "vs the TD(lambda) net", ["backgammon_ui.py"]),
     ("SCRABBLE", "vs the trie engine", ["scrabble_agent.py", "--play"]),
 ]
