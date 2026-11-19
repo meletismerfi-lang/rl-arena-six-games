@@ -174,6 +174,7 @@ One menu, Enter to play. Each game runs in its own process, so a crash never tak
 | Chess | Stockfish via UCI | search, not RL (`chess_agent.py`) | depth 23 in 0.5 s; `--elo` dial 1320→3400 |
 | Flappy Bird | PPO, 6-float state obs | `train_flappy_state.py`, 4M steps, CPU | 102.8 pipes mean, max 188 |
 | Ms. Pac-Man | Double DQN, 1.69M params | `dqn_pacman.py` (EnvPool), 4M steps | 2,355 mean over 6 full games |
+| Ms. Pac-Man | C51 Rainbow-lite, 3.55M params | `rainbow_pacman_3.py` (EnvPool), 10M steps | **3,530** mean over 12 games (+50% over the DQN) |
 | Backgammon | TD(λ) self-play value net | `backgammon_agent.py --train`, 25k games | 96.0% vs pip-count player (200 g), 99.2% vs random (120 g) |
 | Doom | PPO on ViZDoom, 4 actions | `doom_train.py` under WSL+xvfb, 1.2M steps | eval 12.2 at the 800k checkpoint (final 8.2) |
 | Scrabble | trie engine + leave valuation | `scrabble_agent.py`, no learning | ~520 points per side in self-play |
@@ -254,6 +255,84 @@ sides, alternating colours:
 
 So the search depth is worth real strength, and `backgammon_ui.py --search 2ply` (the default)
 plays better than the net it uses. `--search 1ply` is the fast mode.
+
+## Rainbow-lite: un-squashing the ghost reward (Ms. Pac-Man)
+
+Ms. Pac-Man pays 200/400/800/1600 for successive ghosts in one energiser window, against 10 per
+dot — a 160:1 ghost:dot ratio. A square-root reward squash, `sign(r)(sqrt(|r|+1) - 1)`, compresses
+that 1600-point chain to 39.0 and a 10-point dot to 2.32, cutting the ratio to **16.8:1** and giving
+the agent little reason to hunt ghost chains at all. Linear scaling preserves the ratio exactly:
+
+| transform | 4th ghost (1600) | dot (10) | ratio |
+|---|---|---|---|
+| squash `sign(r)(sqrt(|r|+1)-1)` | 39.0 | 2.32 | 16.8 : 1 |
+| scale `r * 0.01` | 16.0 | 0.10 | 160 : 1 |
+
+Same 3.55M-param C51 network throughout, six to twelve full-game episodes per evaluation:
+
+| run | steps | mean |
+|---|---|---|
+| Double DQN baseline | 4M | 2,355 |
+| QR-DQN (51 quantiles) | 4M / 12M | 872 / 832 |
+| C51 + squash | 4M | 1,500 → 2,040 |
+| C51 + linear scale | 4M | 2,380 |
+| **C51 + linear scale, batch 128 / 4 grad steps** | **10M** | **3,530** (best, at 9.5M; 3,280 final) |
+
+The win is attributable to reward magnitude and update density rather than the distributional head:
+QR-DQN lost outright, and C51 only passed DQN once the squash was removed. Best-model selection is
+strict-improvement-only over 12 evaluation episodes, so the reported number is a checkpoint, not a
+lucky sample.
+
+Reproduce:
+
+```bash
+python rainbow_pacman_3.py --envs 32 --steps 10000000 --trunk nature --width 64 --atoms 51 \
+  --batch-size 128 --gradient-steps 4 --reward-transform scale --reward-scale 0.01 \
+  --vmin -1 --vmax 25 --buffer 60000 --eps-steps 400000 --n-step 3 \
+  --eval-every 500000 --eval-episodes 12 --out models/rainbow_scale_10m
+```
+
+### The support width matters more than the head
+
+Widening `--vmax` to "make room for big ghost chains" destroys resolution. A real episode return
+under scale 0.01 is ~4.6 (= 460 game points), so with 51 atoms spread over `[-1, 150]` the bin is
+302 raw points wide and returns of 20, 100 and 300 points all land on **atom 0-1** — the head cannot
+rank actions at all, and training flattens at 60-90:
+
+| support | bin | 20 pts | 100 pts | 300 pts | measured |
+|---|---|---|---|---|---|
+| `[-1, 25]`, 51 atoms | 52 pts | atom 2 | atom 4 | atom 8 | **3,530** |
+| `[-1, 150]`, 51 atoms | 302 pts | atom 0 | atom 1 | atom 1 | 60-90, flat |
+| `[-1, 40]`, 101 atoms | 41 pts | atom 3 | atom 5 | atom 10 | not competitive by 6.5M |
+
+### Replay capacity is a RAM problem, not a VRAM one
+
+The model needs ~850 MiB of VRAM at batch 128 — the 8 GB card was never the constraint. Replay is a
+host numpy array, and storing `obs` plus `next_obs` as two 4-frame stacks costs 26.3 GB at 500k
+transitions, which does not fit in a 28 GB WSL VM and dies at CUDA init. Consecutive stacks overlap
+3 of 4 frames, so `rainbow_pacman_3.py` stores one 5-frame window per transition instead
+(`obs = w[:4]`, `next_obs = w[1:]`), verified bit-identical against the naive layout:
+
+| capacity | two 4-frame stacks | one 5-frame window |
+|---|---|---|
+| 60,000 | 3.2 GB | 2.0 GB |
+| 200,000 | 10.5 GB | 6.6 GB |
+| 500,000 | 26.3 GB | **16.4 GB** |
+
+`--naive-frames` restores the old layout for comparison.
+
+### What did not work
+
+- **Impala trunk** (`--trunk impala`, 4.26M params): 744 steps/s versus 2,851 for the nature CNN —
+  3.8x the wall clock for 1.2x the parameters, and no evidence it pays for itself.
+- **Wider nature trunk** (`--width 112`, 5.99M params): flat at 210-320 through 6M steps while the
+  3.55M trunk was at 1,910+, against a 60k-transition buffer. Capacity without data to constrain it
+  memorises instead of generalising.
+- **NoisyLinear** (`--noisy`): first run scored 210, but that number is void — the factorised noise
+  used `sign(x)|x|` instead of `sign(x)sqrt(|x|)`, inflating every weight's noise to ~N(0,1)
+  regardless of fan-in. Fixed, untested since.
+- **MCTS / expectimax on top of a fixed DQN**: 680 → 130 (depth 1) → 180 (depth 2), an 87-91%
+  regression. Uncalibrated Q-values maximised over a shallow tree pick overestimated actions.
 
 ## DQN update-ratio finding (Ms. Pac-Man)
 
