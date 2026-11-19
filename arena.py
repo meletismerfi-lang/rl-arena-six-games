@@ -28,7 +28,7 @@ PLAY = [
 WATCH = [
     ("CHESS — AI vs AI", "2400 (white) vs 3200 (black)", ["chess_ai.py"]),
     ("FLAPPY — AI vs AI", "103-pipe model vs 77-pipe model", ["flappy_duel.py", "--both-bots"]),
-    ("PAC-MAN — AI vs AI", "4M model (2,355) vs 10M model (1,317)", ["pacman_ai.py"]),
+    ("PAC-MAN — AI vs AI", "Rainbow (3,230) vs DQN (2,355)", ["pacman_ai.py"]),
     ("BACKGAMMON — AI vs AI", "TD net vs pip-count baseline", ["backgammon_ai.py"]),
     ("DOOM — watch", "ViZDoom PPO clearing defend_the_center", ["doom_wsl.py"]),
 ]

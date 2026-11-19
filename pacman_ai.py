@@ -10,6 +10,7 @@ scores on screen are comparable to the recorded numbers (4M = 2,355, 10M = 1,317
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 
 import ale_py
@@ -20,21 +21,34 @@ import torch as th
 from gymnasium.wrappers import AtariPreprocessing, FrameStack
 from stable_baselines3 import DQN
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from pacman_duel import EnvPoolObs, RainbowBot  # noqa: E402
+
 gym.register_envs(ale_py)
 ROOT = Path(__file__).resolve().parent
 ENV_ID = "ALE/MsPacman-v5"
 
 
 class Pane:
+    """One side of the AI-vs-AI race. A .pt path loads the C51 Rainbow net (EnvPool-order
+    observations); a .zip path loads the older SB3 DQN through AtariPreprocessing."""
+
     def __init__(self, model_path: Path, label: str, seed: int, device: str):
-        self.model = DQN.load(str(model_path), device="cpu")
-        self.model.replay_buffer = None
-        self.model.policy.to(device)
+        self.rainbow = model_path.suffix == ".pt"
+        if self.rainbow:
+            self.bot = RainbowBot(model_path, device)
+            e = gym.make(ENV_ID, frameskip=1, repeat_action_probability=0.0, render_mode="rgb_array")
+            self.env = EnvPoolObs(e)
+        else:
+            self.model = DQN.load(str(model_path), device="cpu")
+            self.model.replay_buffer = None
+            self.model.policy.to(device)
+            e = gym.make(ENV_ID, frameskip=1, repeat_action_probability=0.0, render_mode="rgb_array")
+            e = AtariPreprocessing(e, frame_skip=4, screen_size=84, grayscale_obs=True,
+                                   grayscale_newaxis=False, scale_obs=False,
+                                   terminal_on_life_loss=False)
+            self.env = FrameStack(e, 4)
         self.label = label
-        e = gym.make(ENV_ID, frameskip=1, repeat_action_probability=0.0, render_mode="rgb_array")
-        e = AtariPreprocessing(e, frame_skip=4, screen_size=84, grayscale_obs=True,
-                               grayscale_newaxis=False, scale_obs=False, terminal_on_life_loss=False)
-        self.env = FrameStack(e, 4)
         self.seed = seed
         self.best = 0.0
         self.rounds = 0
@@ -45,8 +59,11 @@ class Pane:
         self.score = 0.0
 
     def step(self) -> np.ndarray:
-        a, _ = self.model.predict(np.asarray(self.obs)[None].astype(np.uint8), deterministic=True)
-        self.obs, r, term, trunc, _ = self.env.step(int(np.asarray(a).reshape(-1)[0]))
+        if self.rainbow:
+            self.obs, r, term, trunc, _ = self.env.step(self.bot.act(self.obs))
+        else:
+            a, _ = self.model.predict(np.asarray(self.obs)[None].astype(np.uint8), deterministic=True)
+            self.obs, r, term, trunc, _ = self.env.step(int(np.asarray(a).reshape(-1)[0]))
         self.score += float(r)
         if term or trunc:
             self.best = max(self.best, self.score)
@@ -57,15 +74,17 @@ class Pane:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--a", default="models/mspacman/dqn_envpool/final_4000000.zip")
-    ap.add_argument("--b", default="models/mspacman/dqn_envpool/final_6000000.zip")
+    ap.add_argument("--a", default="models/rainbow_scale_10m/best.pt")
+    ap.add_argument("--b", default="models/mspacman/dqn_envpool/final_4000000.zip")
     ap.add_argument("--scale", type=int, default=2)
     ap.add_argument("--fps", type=int, default=30)
     args = ap.parse_args()
 
     device = "cuda" if th.cuda.is_available() else "cpu"
-    pa = Pane(ROOT / args.a, "4M / 2,355", 7, device)
-    pb = Pane(ROOT / args.b, "10M / 1,317", 107, device)
+    lab_a = "Rainbow / 3,230" if args.a.endswith(".pt") else "DQN / 2,355"
+    lab_b = "Rainbow / 3,230" if args.b.endswith(".pt") else "DQN / 2,355"
+    pa = Pane(ROOT / args.a, lab_a, 7, device)
+    pb = Pane(ROOT / args.b, lab_b, 107, device)
 
     pygame.init()
     font = pygame.font.SysFont("consolas", 13)
@@ -88,8 +107,10 @@ def main() -> None:
         screen.fill((10, 10, 16))
         screen.blit(sa, (0, 0)); screen.blit(sb, (sa.get_width() + 12, 0))
         y = sa.get_height() + 4
-        screen.blit(big.render(f"A {pa.label:<14} {int(pa.score):>5}", True, (34, 211, 238)), (6, y))
-        screen.blit(big.render(f"B {pb.label:<14} {int(pb.score):>5}", True, (250, 204, 21)),
+        screen.blit(big.render(f"A {pa.label:<16} {int(pa.score):>5}  best {int(pa.best):>5}",
+                               True, (34, 211, 238)), (6, y))
+        screen.blit(big.render(f"B {pb.label:<16} {int(pb.score):>5}  best {int(pb.best):>5}",
+                               True, (250, 204, 21)),
                     (sa.get_width() + 18, y))
         screen.blit(font.render(f"best A {int(pa.best)} · best B {int(pb.best)} · "
                                 f"episodes {pa.rounds}/{pb.rounds} · ESC quit", True, (130, 140, 155)), (6, y + 28))
