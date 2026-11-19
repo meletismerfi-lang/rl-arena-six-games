@@ -89,6 +89,21 @@ def newest_doom_model() -> str | None:
     return hits[-1].relative_to(ROOT).as_posix()
 
 
+def child_python() -> str:
+    """Interpreter for game subprocesses.
+
+    Never `sys.executable`: if the arena itself was started by an interpreter outside the project
+    venv (a system Python, an IDE default, another app's bundled Python), every child inherits it
+    and dies on `ModuleNotFoundError: No module named 'ale_py'`. The games must run on the venv
+    that actually has torch, ale-py and pygame installed.
+    """
+    for cand in (ROOT / ".venv" / "Scripts" / "python.exe",
+                 ROOT / ".venv" / "Scripts" / "pythonw.exe"):
+        if cand.exists():
+            return str(cand)
+    return sys.executable
+
+
 def launch(cmd: list[str]) -> None:
     path = ROOT / cmd[0]
     if not path.exists() and cmd[0] != "doom_wsl.py":
@@ -110,10 +125,10 @@ def launch(cmd: list[str]) -> None:
         return
     if path.name == "scrabble_agent.py":
         # typed input needs a real console, which a pygame child does not have
-        subprocess.Popen([sys.executable, str(path), *cmd[1:]], cwd=str(ROOT),
+        subprocess.Popen([child_python(), str(path), *cmd[1:]], cwd=str(ROOT),
                          creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0))
         return
-    subprocess.run([sys.executable, str(path), *cmd[1:]], cwd=str(ROOT))
+    subprocess.run([child_python(), str(path), *cmd[1:]], cwd=str(ROOT))
 
 
 def main() -> None:
